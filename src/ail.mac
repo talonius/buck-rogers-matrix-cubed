@@ -1,0 +1,79 @@
+; ail.mac -- the general-purpose 8086 macros of John Miles' IBM Audio Interface Library (AIL) 2.x, INCLUDEd by
+; ail.asm.  Only POP_F is expanded in this build; FAR_TO_HUGE and ADD_PTR serve ail.asm's DIGPAK branch, which is
+; not assembled, and nothing expands REP_MOVSB.
+;
+; Author: John Miles.  Copyright (C) 1991, 1992 Miles Design, Inc.
+; Miles Design, Inc., 10926 Jollyville #308, Austin, TX 78759
+; (512) 345-2642 / FAX (512) 338-9630 / BBS (512) 454-9990
+
+; FAR_TO_HUGE fp_seg,fp_off: normalize the far pointer fp_seg:fp_off so that its offset is 0..15 and its whole
+; paragraphs are in the segment.  AX and BX are preserved; the operands must not be AX or BX.
+FAR_TO_HUGE     MACRO fp_seg,fp_off
+                push ax bx                      ;keep the scratch registers
+                mov ax,fp_seg                   ;AX = segment
+                mov bx,fp_off                   ;BX = offset / 16, its whole paragraphs
+                shr bx,1
+                shr bx,1
+                shr bx,1
+                shr bx,1
+                add ax,bx                       ;move them into the segment
+                mov fp_seg,ax
+                and fp_off,0fh                  ;leave the byte within the paragraph
+                pop bx ax
+                ENDM
+
+; ADD_PTR add_l,add_h,pseg,poff: add the 32-bit count add_h:add_l to the far pointer pseg:poff, leaving it
+; normalized (offset 0..15).  The pointer is widened to its 20-bit linear address in CX:BX, the count added, and the
+; sum split back.  BX and CX are preserved; the operands must not be BX or CX.
+ADD_PTR         MACRO add_l,add_h,pseg,poff
+                push bx                         ;keep the scratch registers
+                push cx
+                mov bx,pseg                     ;CX:BX = segment * 16
+                xor cx,cx
+                shl bx,1
+                rcl cx,1
+                shl bx,1
+                rcl cx,1
+                shl bx,1
+                rcl cx,1
+                shl bx,1
+                rcl cx,1
+                add bx,poff                     ;+ offset = linear address
+                adc cx,0
+                add bx,add_l                    ;+ the count
+                adc cx,add_h
+                mov poff,bx                     ;new offset = linear address mod 16
+                and poff,1111b
+                shr cx,1                        ;new segment = linear address / 16
+                rcr bx,1
+                shr cx,1
+                rcr bx,1
+                shr cx,1
+                rcr bx,1
+                shr cx,1
+                rcr bx,1
+                mov pseg,bx
+                pop cx
+                pop bx
+                ENDM
+
+; POP_F: restore the flags a PUSHF saved through an IRET rather than POPF, which on early 80286 steppings can admit a
+; pending interrupt while restoring flags that keep interrupts disabled.  OR BH,0 assembles to 80 CF 00, and its CF
+; byte is also an IRET opcode: PUSH CS and the near call enter that byte with a far return address on top of the
+; saved flags, so the IRET pops all three and resumes after the call.  The OR only sets flags, which the IRET
+; replaces; every register is preserved.
+POP_F           MACRO
+                LOCAL intel_bytes
+                or bh,0                         ;80 CF 00; nothing but the flags changes
+intel_bytes     equ $-2                         ;the OR's CF byte, an IRET
+                push cs                         ;far return address = CS:after the call
+                call intel_bytes                ;the IRET pops it and the PUSHF'd flags
+                ENDM
+
+; REP_MOVSB: copy CX bytes from DS:SI to ES:DI as CX/2 words and then the odd byte, if any.
+REP_MOVSB       MACRO
+                shr cx,1                        ;CX = words, CF = the odd byte
+                rep movsw
+                adc cx,cx                       ;REP left CX 0, so CX = CF
+                rep movsb
+                ENDM
