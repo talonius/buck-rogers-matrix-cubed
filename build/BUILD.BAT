@@ -1,7 +1,7 @@
 @echo off
 rem ===================================================================
 rem  Buck Rogers: Matrix Cubed v1.0 -- THE WHOLE-IMAGE BUILD. Run from
-rem  e:\src by gametools/build.sh, which mounts:
+rem  e:\src by build.sh, which mounts:
 rem     C: games      D: the compiler     E: this tree
 rem     F: TASM 1.0   G: EXEPACK          H: TASM 3.1
 rem
